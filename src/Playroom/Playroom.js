@@ -11,6 +11,9 @@ import 'codemirror/theme/neo.css';
 import Preview from './Preview/Preview';
 import styles from './Playroom.less';
 
+const prettier = require('prettier/standalone');
+const babylon = require('prettier/parser-babylon');
+
 // CodeMirror blows up in a Node context, so only execute it in the browser
 const ReactCodeMirror =
   typeof window === 'undefined'
@@ -23,7 +26,7 @@ const ReactCodeMirror =
         require('codemirror/addon/hint/show-hint');
         require('codemirror/addon/hint/xml-hint');
 
-        return lib;
+        return lib.Controlled;
       })();
 
 const completeAfter = (cm, predicate) => {
@@ -72,7 +75,8 @@ export default class Playroom extends Component {
     this.state = {
       codeReady: false,
       code: null,
-      renderCode: null
+      renderCode: null,
+      key: 0
     };
   }
 
@@ -81,7 +85,22 @@ export default class Playroom extends Component {
       this.initialiseCode(code);
       this.validateCode(code);
     });
+    window.addEventListener('keydown', this.handleKeyPress);
   }
+
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this.handleKeyPress);
+  }
+
+  handleKeyPress = e => {
+    if (
+      e.keyCode == 83 &&
+      (navigator.platform.match('Mac') ? e.metaKey : e.ctrlKey)
+    ) {
+      e.preventDefault();
+      this.setState({ code: format(this.state.code) });
+    }
+  };
 
   storeCodeMirrorRef = cmRef => {
     this.cmRef = cmRef;
@@ -139,7 +158,7 @@ export default class Playroom extends Component {
 
   render() {
     const { components, themes, widths, frameComponent } = this.props;
-    const { codeReady, code, renderCode } = this.state;
+    const { codeReady, code, renderCode, key } = this.state;
 
     const themeNames = Object.keys(themes);
     const frames = flatMap(widths, width =>
@@ -195,6 +214,7 @@ export default class Playroom extends Component {
         <div className={styles.editorContainer}>
           <ReactCodeMirror
             ref={this.storeCodeMirrorRef}
+            key={key}
             value={code}
             onChange={this.handleChange}
             options={{
@@ -221,4 +241,25 @@ export default class Playroom extends Component {
       </div>
     );
   }
+}
+
+function format(str) {
+  // return prettier.format(str, {
+  //   parser: "babylon"
+  // });
+  // Try formatting Markdown JS Code Blocks
+  // try {
+  //   str = str.replace(
+  //     /(^\s*```(?:js|jsx|javascript)\s*$[\r\n])([\s\S]*?)(^\s*```)/gim,
+  //     (_, start, code, end) => start + prettier.format(code) + end.trimRight()
+  //   );
+  // } catch (error) {}
+  // Try formatting it all
+  try {
+    str = prettier.format(str, {
+      parser: 'babylon',
+      plugins: [babylon]
+    });
+  } catch (error) {}
+  return str;
 }
