@@ -9,9 +9,11 @@ import 'codemirror/lib/codemirror.css';
 import 'codemirror/theme/neo.css';
 import Preview from './Preview/Preview';
 import styles from './Playroom.less';
-
-const prettier = require('prettier/standalone');
-const babylon = require('prettier/parser-babylon');
+import {
+  positionToCursorOffset,
+  formatCode,
+  cursorOffsetToPosition
+} from '../utils/formatting';
 
 // CodeMirror blows up in a Node context, so only execute it in the browser
 const ReactCodeMirror =
@@ -25,7 +27,7 @@ const ReactCodeMirror =
         require('codemirror/addon/hint/show-hint');
         require('codemirror/addon/hint/xml-hint');
 
-        return lib.Controlled;
+        return lib;
       })();
 
 const completeAfter = (cm, predicate) => {
@@ -93,11 +95,41 @@ export default class Playroom extends Component {
 
   handleKeyPress = e => {
     if (
-      e.keyCode == 83 &&
+      e.keyCode === 83 &&
       (navigator.platform.match('Mac') ? e.metaKey : e.ctrlKey)
     ) {
       e.preventDefault();
-      this.setState({ code: format(this.state.code) });
+
+      const wrappedCode = `<>\n${this.state.code}\n</>`;
+      const currCursor = this.cmRef.codeMirror.getCursor();
+      const currentCursorPosition = positionToCursorOffset(wrappedCode, {
+        line: currCursor.line + 1,
+        ch: currCursor.ch
+      });
+
+      const formatResult = formatCode({
+        code: wrappedCode,
+        cursorOffset: currentCursorPosition
+      });
+
+      const position = cursorOffsetToPosition(
+        formatResult.formatted,
+        formatResult.cursorOffset
+      );
+
+      this.setState(
+        {
+          code: formatResult.formatted.slice(3, -5),
+          key: Math.random()
+        },
+        () => {
+          this.cmRef.codeMirror.focus();
+          this.cmRef.codeMirror.setCursor({
+            line: position.line - 1,
+            ch: position.ch
+          });
+        }
+      );
     }
   };
 
@@ -237,25 +269,4 @@ export default class Playroom extends Component {
       </div>
     );
   }
-}
-
-function format(str) {
-  // return prettier.format(str, {
-  //   parser: "babylon"
-  // });
-  // Try formatting Markdown JS Code Blocks
-  // try {
-  //   str = str.replace(
-  //     /(^\s*```(?:js|jsx|javascript)\s*$[\r\n])([\s\S]*?)(^\s*```)/gim,
-  //     (_, start, code, end) => start + prettier.format(code) + end.trimRight()
-  //   );
-  // } catch (error) {}
-  // Try formatting it all
-  try {
-    str = prettier.format(str, {
-      parser: 'babylon',
-      plugins: [babylon]
-    });
-  } catch (error) {}
-  return str;
 }
